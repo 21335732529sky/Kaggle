@@ -1,8 +1,8 @@
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
 
 class Model:
-    def __init__(self):
-        self.model = DecisionTreeClassifier()
+    def __init__(self, params):
+        self.model = RandomForestClassifier(**params)
 
     def train(self, X, Y):
         self.model.fit(X, Y)
