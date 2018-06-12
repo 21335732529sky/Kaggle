@@ -3,11 +3,23 @@ from Model import Model
 import numpy as np
 import matplotlib.pyplot as pl
 import seaborn
+import warnings
 
-m = Model()
+warnings.filterwarnings('ignore')
+
+
+
+m = Model({'n_estimators': 100,
+           'max_depth': 2,
+           'min_samples_split': 4,
+           'learning_rate': 0.1})
 d = Dataset('D:HomeCredit/application_train.csv',
             'D:HomeCredit/application_test.csv',
-            omit=[['SK_ID_CURR', 'TARGET'], []], target='TARGET')
+            omit=[['TARGET'], []], target='TARGET',
+            additional=[{'path': 'D:HomeCredit/bureau.csv',
+                        'useAE': True,
+                        'index': 'SK_ID_CURR',
+                        'omit': ['SK_ID_BUREAU']}])
 
 x, y = d.train_data()
 

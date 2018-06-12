@@ -1,8 +1,8 @@
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 
 class Model:
     def __init__(self, params):
-        self.model = RandomForestClassifier(**params)
+        self.model = GradientBoostingClassifier(**params)
 
     def train(self, X, Y):
         self.model.fit(X, Y)
