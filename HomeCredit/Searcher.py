@@ -1,8 +1,8 @@
 from Model import Model
 from Dataset import Dataset
 from tqdm import tqdm
-import itertools
 from functools import reduce
+import itertools
 
 class Searcher:
     def __init__(self, search_space):
@@ -14,7 +14,7 @@ class Searcher:
         max_point = {}
         x_t, y_t = dataset.train_data()
         x_v, y_v = dataset.validation_data()
-        for list_ in tqdm(itertools.product(*self.domains), total=reduce(lambda x, y: len(x)*len(y), self.domains)):
+        for list_ in tqdm(itertools.product(*self.domains), total=reduce(lambda x,y: x*y, map(len, self.domains))):
             params = {self.keys[i]: list_[i] for i in range(len(list_))}
             m = Model(params)
             m.train(x_t.values, y_t.values.flatten())
@@ -30,8 +30,10 @@ class Searcher:
 
 
 if __name__ == '__main__':
-    s = Searcher({'n_estimators': [5,10,15,20],
-                 'max_depth': [2,4,6,8]})
+    s = Searcher({'n_estimators': [5, 10, 20, 50, 100],
+                 'max_depth': [2, 4, 6, 8, 10],
+                 'min_samples_split': [2, 4, 8, 16, 32],
+                 'learning_rate': [1e-4, 1e-3, 1e-2, 1e-1]})
     d = Dataset('D:HomeCredit/application_train.csv',
                 'D:HomeCredit/application_test.csv',
                 omit=[['SK_ID_CURR', 'TARGET'], []], target='TARGET')
