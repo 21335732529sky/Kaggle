@@ -13,16 +13,27 @@ class Dataset:
         self.test = self._read_data(path_test, istest=True, omit=omit[1]) if path_test != '' else None
         self.split = int(self.train[0].shape[0]*(1 - validate_size)) if self.train != None else None
 
-        if self.train is not None: self.train[0] = self._normalize(self.train[0], omit=omit)
+        if self.train is not None: self.train[0] = self._normalize(self.train[0], omit=omit+['SK_ID_CURR'])
         if self.test is not None: self.test = self._normalize(self.test, omit=['SK_ID_CURR'])
 
-    def _merge(self, base, add, on=''):
-        df = pd.DataFrame(columns=[on] + list(range(add.shape[0]-1)))
-        for i, index in enumerate(add.ix[:, [on]].values.flatten()):
-            tmp = sum(v for v in add.ix[add.ix[:, [on]] == i, :].values.flatten()) / (add.index == i).shape[0]
-            df[i] = np.array([index] + list(tmp))
+        for info in additional:
+            df = self._read_data(info['path'], target_col=info['index'], omit=info['omit'])[0]
+            self.train[0] = self._merge(self.train[0], df, on=info['index'])
+            self.test = self._merge(self.test, df, on=info['index'])
 
-        return pd.merge(base, add, on=[on])
+        self.train[0] = self.train.ix[:, self.train.columns != 'SK_ID_CURR']
+        print(self.train[0])
+
+    def _merge(self, base, add, on=''):
+        df = pd.DataFrame(columns=add.columns)
+        for i, index in enumerate(base.ix[:, [on]].values.flatten()):
+            num = (add.ix[add[on] == index, :] == i).shape[0]
+            tmp = sum(v for v in add.ix[add[on] == index, :].values) / num \
+                  if num != 0 else np.array([0,]*add.shape[1])
+            try: df[i] = np.array([index] + list(tmp))
+            except KeyError: pass
+
+        return pd.merge(base, df, on=[on])
 
     def _compress(self, df, index=''):
         ae = AutoEncoder(df.shape[0], int(df.shape[0]/2))
@@ -47,7 +58,7 @@ class Dataset:
         return df
 
 
-    def _read_data(self, path, target_col='', istest=False, omit=[], target=''):
+    def _read_data(self, path, target_col='', istest=False, omit=[]):
         df = self._impute(pd.read_csv(path))
         if target_col == '': istest = True
         df = df.fillna(0)
