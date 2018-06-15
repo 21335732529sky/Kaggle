@@ -59,9 +59,6 @@ class AutoEncoder:
         return self.sess.run(self.hidden, feed_dict={self.inputs: x, self.dropout: 1.0})
 
 
-def log(x):
-    return np.log(x+1)
-
 #for test
 if __name__ == '__main__':
     d = Dataset('D:HomeCredit/bureau.csv', '', omit=[['SK_ID_CURR', 'SK_ID_BUREAU'], []],
