@@ -30,8 +30,11 @@ class Dataset:
             num = (add.ix[add[on] == index, :] == i).shape[0]
             tmp = sum(v for v in add.ix[add[on] == index, :].values) / num \
                   if num != 0 else np.array([0,]*add.shape[1])
-            try: df[i] = np.array([index] + list(tmp))
-            except KeyError: pass
+
+            try:
+                df[i] = np.array([index] + list(tmp))
+            except KeyError:
+                pass
 
         return pd.merge(base, df, on=[on])
 
@@ -59,7 +62,7 @@ class Dataset:
 
 
     def _read_data(self, path, target_col='', istest=False, omit=[]):
-        df = self._impute(pd.read_csv(path))
+        df = self._impute(pd.read_csv(path)[:10000])
         if target_col == '': istest = True
         df = df.fillna(0)
         columns = [x not in omit for x in df.columns]
