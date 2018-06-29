@@ -20,7 +20,7 @@ d = Dataset(filepath + 'application_train.csv',
                         'useAE': True,
                         'index': 'SK_ID_CURR',
                         'omit': ['SK_ID_BUREAU']}])
-'''
+
 x, y = d.train_data()
 
 m.train(x.values, y.values.flatten())
@@ -33,5 +33,5 @@ with open('submission.csv', 'w') as f:
     ans = m.model.predict_proba(x.ix[:, x.columns != 'SK_ID_CURR'].values)
     f.write('SK_ID_CURR,TARGET\n')
     [f.write('{},{}\n'.format(i, a)) for i, a in zip(x.ix[:, ['SK_ID_CURR']].values.flatten(), [b[1] for b in ans])]
-'''
+
 
