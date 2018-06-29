@@ -8,6 +8,14 @@ import warnings
 warnings.filterwarnings('ignore')
 
 filepath = "/home/u271969h/.kaggle/competitions/home-credit-default-risk/"
+additional_data = [{'path': filepath + 'bureau.csv', 'useAE': True,
+                    'index': 'SK_ID_CURR', 'omit': ['SK_ID_BUREAU']},
+                   {'path': filepath + 'previous_application.csv', 'useAE': False,
+                    'index': 'SK_ID_CURR', 'omit': ['SK_ID_PREV']},
+                   {'path': filepath + 'POS_CASH_balance.csv', 'useAE': False,
+                    'index': 'SK_ID_CURR', 'omit': ['SK_ID_PREV']},
+                   {'path': filepath + 'instalments_payments.csv', 'useAE': False,
+                    'index': 'SK_ID_CURR', 'omit': ['SK_ID_PREV']}]
 
 m = Model({'n_estimators': 100,
            'max_depth': 2,
@@ -16,10 +24,7 @@ m = Model({'n_estimators': 100,
 d = Dataset(filepath + 'application_train.csv',
             filepath + 'application_test.csv',
             omit=[['TARGET'], []], target='TARGET',
-            additional=[{'path': filepath + 'bureau.csv',
-                        'useAE': True,
-                        'index': 'SK_ID_CURR',
-                        'omit': ['SK_ID_BUREAU']}])
+            additional=additional_data)
 
 x, y = d.train_data()
 
