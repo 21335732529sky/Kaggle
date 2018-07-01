@@ -46,11 +46,20 @@ class Dataset:
 
     def _impute(self, df):
         for key in df.ix[:, df.dtypes == 'object'].columns:
+            filled = df[key].fillna('N').values.reshape(-1, 1)
             try:
-                df[key] = self.encoders[key].transform(df[key].fillna('N').values.reshape(-1, 1))
+
+                df[key] = self.encoders[key].transform(filled)
             except KeyError:
-                self.encoders[key] = LabelEncoder().fit(df[key].fillna('N').values.reshape(-1, 1))
-                df[key] = self.encoders[key].transform(df[key].fillna('N').values.reshape(-1, 1))
+                self.encoders[key] = LabelEncoder().fit(filled)
+                df[key] = self.encoders[key].transform(filled)
+            except ValueError:
+                mapping = self.encoders[key].get_params()
+                max_value = max(mapping.values)
+                new_labels = list(set(filled) - set(mapping.keys()))
+                self.encoders[key] = self.encoders.set_params({l: i for l, i in zip(new_labels,
+                                                                                    range(max_value, max_value+len(new_labels)))})
+                df[key] = self.encoders[key].transform(filled)
 
         return df
 
