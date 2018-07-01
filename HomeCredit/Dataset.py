@@ -54,11 +54,8 @@ class Dataset:
                 self.encoders[key] = LabelEncoder().fit(filled)
                 df[key] = self.encoders[key].transform(filled)
             except ValueError:
-                mapping = self.encoders[key].get_params()
-                max_value = max(mapping.values)
-                new_labels = list(set(filled) - set(mapping.keys()))
-                self.encoders[key] = self.encoders.set_params({l: i for l, i in zip(new_labels,
-                                                                                    range(max_value, max_value+len(new_labels)))})
+                new_labels = list(set(self.encoders[key].classes_) - set(df[key].values.flatten()))
+                self.encoders[key].classes_ = np.array(list(self.classes) + new_labels)
                 df[key] = self.encoders[key].transform(filled)
 
         return df
