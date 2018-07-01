@@ -55,7 +55,7 @@ class Dataset:
                 df[key] = self.encoders[key].transform(filled)
             except ValueError:
                 new_labels = list(set(self.encoders[key].classes_) - set(df[key].values.flatten()))
-                self.encoders[key].classes_ = np.array(list(self.classes) + new_labels)
+                self.encoders[key].classes_ = np.array(list(self.encoders[key].classes_) + new_labels)
                 df[key] = self.encoders[key].transform(filled)
 
         return df
