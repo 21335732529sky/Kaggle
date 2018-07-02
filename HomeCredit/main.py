@@ -14,7 +14,7 @@ additional_data = [{'path': filepath + 'bureau.csv', 'useAE': True,
                     'index': 'SK_ID_CURR', 'omit': ['SK_ID_PREV']},
                    {'path': filepath + 'POS_CASH_balance.csv', 'useAE': False,
                     'index': 'SK_ID_CURR', 'omit': ['SK_ID_PREV']},
-                   {'path': filepath + 'instalments_payments.csv', 'useAE': False,
+                   {'path': filepath + 'installments_payments.csv', 'useAE': False,
                     'index': 'SK_ID_CURR', 'omit': ['SK_ID_PREV']}]
 
 m = Model({'n_estimators': 100,
