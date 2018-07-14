@@ -50,14 +50,6 @@ class Dataset:
 
         [job.join() for job in jobs]
 
-        for i, index in tqdm(enumerate(base.ix[:, [on]].values.flatten()), total=base.shape[0]):
-            num = (add.ix[add[on] == index, :] == i).shape[0]
-            
-            tmp = sum(v for v in add.ix[add[on] == index, :].values) / num \
-                  if num != 0 else np.array([index] + [0,]*(add.shape[1]-1))
-
-            df = df.append(pd.DataFrame([tmp], columns=tmpc))
-
 
         return pd.merge(base, df, on=[on], how='left')
 
