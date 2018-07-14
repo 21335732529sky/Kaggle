@@ -5,6 +5,7 @@ from sklearn.preprocessing import MinMaxScaler
 from AutoEncoder import AutoEncoder
 import sys
 from tqdm import tqdm
+from multiprocessing import Process
 
 class Dataset:
     def __init__(self, path_train='', path_test='', norm_func=None,
@@ -26,8 +27,26 @@ class Dataset:
 
     def _merge(self, base, add, on=''):
         df = pd.DataFrame(columns=add.columns)
-        tmpc =  add.columns
+        tmpc = add.columns
         print('mergeing...')
+        jobs = []
+        fold = base.shape[0] // 4
+        def insert(data, st, ed):
+            for i, index in enumerate(base.ix[st:ed, [on]].values.flatten()):
+                num = (add.ix[add[on] == index, :] == i).shape[0]
+
+                tmp = sum(v for v in add.ix[add[on] == index, :].values) / num \
+                    if num != 0 else np.array([index] + [0, ] * (add.shape[1] - 1))
+
+                data = data.append(pd.DataFrame([tmp], columns=tmpc))
+
+        for i in range(4):
+            job = Process(target=insert, args=(df, i*fold, (i+1)*fold))
+            jobs.append(job)
+            job.start()
+
+        [job.join() for job in jobs]
+
         for i, index in tqdm(enumerate(base.ix[:, [on]].values.flatten()), total=base.shape[0]):
             num = (add.ix[add[on] == index, :] == i).shape[0]
             
@@ -35,7 +54,8 @@ class Dataset:
                   if num != 0 else np.array([index] + [0,]*(add.shape[1]-1))
 
             df = df.append(pd.DataFrame([tmp], columns=tmpc))
-        
+
+
         return pd.merge(base, df, on=[on], how='left')
 
     def _compress(self, df, index=''):
