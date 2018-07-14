@@ -32,8 +32,8 @@ class Dataset:
         jobs = []
         pbar = tqdm(total=base.shape[0])
         fold = base.shape[0] // 4
-        def insert(data, st, ed, pb):
-            for i, index in enumerate(base.ix[st:ed, [on]].values.flatten()):
+        def insert(data, st, ed):
+            for i, index in tqdm(enumerate(base.ix[st:ed, [on]].values.flatten()), total=ed-st):
                 num = (add.ix[add[on] == index, :] == i).shape[0]
 
                 tmp = sum(v for v in add.ix[add[on] == index, :].values) / num \
@@ -41,10 +41,10 @@ class Dataset:
 
                 data = data.append(pd.DataFrame([tmp], columns=tmpc))
 
-                pb.update(1)
+                if i % 10 == 0: pb.update(10)
 
         for i in range(4):
-            job = Process(target=insert, args=(df, i*fold, (i+1)*fold, pbar))
+            job = Process(target=insert, args=(df, i*fold, (i+1)*fold))
             jobs.append(job)
             job.start()
 
