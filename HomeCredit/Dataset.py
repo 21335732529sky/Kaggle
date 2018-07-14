@@ -30,8 +30,9 @@ class Dataset:
         tmpc = add.columns
         print('mergeing...')
         jobs = []
+        pbar = tqdm(total=base.shape[0])
         fold = base.shape[0] // 4
-        def insert(data, st, ed):
+        def insert(data, st, ed, pb):
             for i, index in enumerate(base.ix[st:ed, [on]].values.flatten()):
                 num = (add.ix[add[on] == index, :] == i).shape[0]
 
@@ -40,8 +41,10 @@ class Dataset:
 
                 data = data.append(pd.DataFrame([tmp], columns=tmpc))
 
+                pb.update(1)
+
         for i in range(4):
-            job = Process(target=insert, args=(df, i*fold, (i+1)*fold))
+            job = Process(target=insert, args=(df, i*fold, (i+1)*fold, pbar))
             jobs.append(job)
             job.start()
 
