@@ -41,7 +41,6 @@ class Dataset:
 
                 data = data.append(pd.DataFrame([tmp], columns=tmpc))
 
-                if i % 10 == 0: pb.update(10)
 
         for i in range(4):
             job = Process(target=insert, args=(df, i*fold, (i+1)*fold))
