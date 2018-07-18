@@ -3,6 +3,10 @@ from Dataset import Dataset
 from tqdm import tqdm
 from functools import reduce
 import itertools
+from time import sleep
+from multiprocessing import Process, cpu_count
+running = 0
+n_cpu = cpu_count()
 
 class Searcher:
     def __init__(self, search_space):
@@ -10,23 +14,39 @@ class Searcher:
         self.domains = [search_space[key] for key in self.keys]
 
     def run(self, dataset):
-        max_ = -99999
-        max_point = {}
         x_t, y_t = dataset.train_data()
         x_v, y_v = dataset.validation_data()
-        for list_ in tqdm(itertools.product(*self.domains), total=reduce(lambda x,y: x*y, map(len, self.domains))):
-            params = {self.keys[i]: list_[i] for i in range(len(list_))}
+        scores = {tuple(d): 0 for d in itertools.product(*self.domains)}
+        domain = list(scores.keys())
+        jobs = []
+        pbar = tqdm(total=reduce(lambda x,y: x*y, map(len, self.domains)))
+
+        def calc_score(board, params):
+            global running; running += 1
+            params = {self.keys[i]: params[i] for i in range(len(params))}
             m = Model(params)
             m.train(x_t.values, y_t.values.flatten())
             score = m.model.score(x_v.values, y_v.values.flatten())
-            if max_ < score:
-                max_ = score
-                max_point = list_
+            board[tuple(params)] = score
+            running -= 1
+            pbar.update(1)
 
-        print('Result:')
-        print('Max score: {:.5f}'.format(max_))
-        print('Params:')
-        [print('{}: {}'.format(k, v)) for k, v in zip(self.keys, max_point)]
+        while len(domain) > 0:
+            global running, n_cpu
+            if running < n_cpu:
+                param = domain.pop()
+                job = Process(target=calc_score, args=(scores, param))
+                jobs.append(job)
+                job.start()
+            else:
+                sleep(1)
+
+        [job.join() for job in jobs]
+        max_score = max(scores.values())
+
+        return next((d, scores[tuple(d)]) for d in itertools.product(*self.domains)\
+                    if scores[tuple(d)] == max_score)
+
 
 
 if __name__ == '__main__':
@@ -38,4 +58,4 @@ if __name__ == '__main__':
                 'D:HomeCredit/application_test.csv',
                 omit=[['SK_ID_CURR', 'TARGET'], []], target='TARGET')
 
-    s.run(d)
+    print(s.run(d))
