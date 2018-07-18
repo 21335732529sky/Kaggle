@@ -5,7 +5,7 @@ from sklearn.preprocessing import MinMaxScaler
 from AutoEncoder import AutoEncoder
 import sys
 from tqdm import tqdm
-from multiprocessing import Process
+from multiprocessing import Process, cpu_count
 
 class Dataset:
     def __init__(self, path_train='', path_test='', norm_func=None,
@@ -30,19 +30,22 @@ class Dataset:
         tmpc = add.columns
         print('mergeing...')
         jobs = []
+        n_cpu = cpu_count()
+        fold = base.shape[0] // n_cpu
         pbar = tqdm(total=base.shape[0])
-        fold = base.shape[0] // 4
+        
         def insert(data, st, ed):
-            for i, index in tqdm(enumerate(base.ix[st:ed, [on]].values.flatten()), total=ed-st):
+            for i, index in enumerate(base.ix[st:ed, [on]].values.flatten()):
                 num = (add.ix[add[on] == index, :] == i).shape[0]
 
                 tmp = sum(v for v in add.ix[add[on] == index, :].values) / num \
                     if num != 0 else np.array([index] + [0, ] * (add.shape[1] - 1))
 
                 data = data.append(pd.DataFrame([tmp], columns=tmpc))
+                pbar.update()
 
 
-        for i in range(4):
+        for i in range(n_cpu):
             job = Process(target=insert, args=(df, i*fold, (i+1)*fold))
             jobs.append(job)
             job.start()
