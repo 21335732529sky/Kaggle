@@ -32,17 +32,16 @@ class Dataset:
         jobs = []
         n_cpu = cpu_count()
         fold = base.shape[0] // n_cpu
-        pbar = tqdm(total=base.shape[0])
-        
+ 
         def insert(data, st, ed):
-            for i, index in enumerate(base.ix[st:ed, [on]].values.flatten()):
+            for i, index in tqdm(enumerate(base.ix[st:ed, [on]].values.flatten()), total=ed-st):
                 num = (add.ix[add[on] == index, :] == i).shape[0]
 
                 tmp = sum(v for v in add.ix[add[on] == index, :].values) / num \
                     if num != 0 else np.array([index] + [0, ] * (add.shape[1] - 1))
 
                 data = data.append(pd.DataFrame([tmp], columns=tmpc))
-                pbar.update()
+
 
 
         for i in range(n_cpu):
