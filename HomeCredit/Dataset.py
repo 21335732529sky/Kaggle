@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from AutoEncoder import AutoEncoder
 import sys
 from tqdm import tqdm
@@ -32,7 +32,7 @@ class Dataset:
         jobs = []
         n_cpu = cpu_count()
         fold = base.shape[0] // n_cpu
- 
+
         def insert(data, st, ed):
             for i, index in tqdm(enumerate(base.ix[st:ed, [on]].values.flatten()), total=ed-st):
                 num = (add.ix[add[on] == index, :] == i).shape[0]
@@ -78,7 +78,7 @@ class Dataset:
 
     def _normalize(self, df, omit=[]):
         for key in df.columns:
-            if key not in omit: df[key] = MinMaxScaler().fit_transform(df[key].values.reshape(-1, 1))
+            if key not in omit: df[key] = StandardScaler().fit_transform(MinMaxScaler().fit_transform(df[key].values.reshape(-1, 1)))
 
         return df
 
