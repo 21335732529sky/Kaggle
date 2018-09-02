@@ -158,31 +158,46 @@ for i in range(len(preds_test)):
                                        (sizes_test[i][0], sizes_test[i][1]),
                                        mode='constant', preserve_range=True))
 
-# Run-length encoding stolen from https://www.kaggle.com/rakhlin/fast-run-length-encoding-python
-def rle_encoding(x):
-    dots = np.where(x.T.flatten() == 1)[0]
-    run_lengths = []
-    prev = -2
-    for b in dots:
-        if (b>prev+1): run_lengths.extend((b + 1, 0))
-        run_lengths[-1] += 1
-        prev = b
-    return run_lengths
+def RLenc(img, order='F', format=True):
+    """
+    img is binary mask image, shape (r,c)
+    order is down-then-right, i.e. Fortran
+    format determines if the order needs to be preformatted (according to submission rules) or not
 
-def prob_to_rles(x, cutoff=0.5):
-    lab_img = label(x > cutoff)
-    for i in range(1, lab_img.max() + 1):
-        yield rle_encoding(lab_img == i)
+    returns run length as an array or string (if format is True)
+    """
+    bytes = img.reshape(img.shape[0] * img.shape[1], order=order)
+    runs = []  ## list of run lengths
+    r = 0  ## the current run length
+    pos = 1  ## count starts from 1 per WK
+    for c in bytes:
+        if (c == 0):
+            if r != 0:
+                runs.append((pos, r))
+                pos += r
+                r = 0
+            pos += 1
+        else:
+            r += 1
 
-new_test_ids = []
-rles = []
-for n, id_ in enumerate(test_ids):
-    rle = list(prob_to_rles(preds_test_upsampled[n]))
-    rles.extend(rle)
-    new_test_ids.extend([id_] * len(rle))
+    # if last run is unsaved (i.e. data ends with 1)
+    if r != 0:
+        runs.append((pos, r))
+        pos += r
+        r = 0
 
-# Create submission DataFrame
-sub = pd.DataFrame()
-sub['ImageId'] = new_test_ids
-sub['EncodedPixels'] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in x))
-sub.to_csv('sub-dsbowl2018-1.csv', index=False)
+    if format:
+        z = ''
+
+        for rr in runs:
+            z += '{} {} '.format(rr[0], rr[1])
+        return z[:-1]
+    else:
+        return runs
+
+pred_dict = {fn[:-4]:RLenc(np.round(preds_test_upsampled[i])) for i,fn in tqdm_notebook(enumerate(test_ids))}
+
+sub = pd.DataFrame.from_dict(pred_dict,orient='index')
+sub.index.names = ['id']
+sub.columns = ['rle_mask']
+sub.to_csv('submission.csv')
