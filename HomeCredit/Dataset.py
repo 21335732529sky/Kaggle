@@ -1,9 +1,11 @@
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from AutoEncoder import AutoEncoder
 import sys
+from tqdm import tqdm
+from multiprocessing import Process, cpu_count
 
 class Dataset:
     def __init__(self, path_train='', path_test='', norm_func=None,
@@ -15,25 +17,42 @@ class Dataset:
 
         if self.train is not None: self.train[0] = self._normalize(self.train[0], omit=omit+['SK_ID_CURR'])
         if self.test is not None: self.test = self._normalize(self.test, omit=['SK_ID_CURR'])
-
+        
         for info in additional:
-            df = self._read_data(info['path'], target_col=info['index'], omit=info['omit'])[0]
+            df = self._normalize(self._read_data(info['path'], target_col=info['index'], omit=info['omit'])[0], omit=['SK_ID_CURR'])
             self.train[0] = self._merge(self.train[0], df, on=info['index'])
             self.test = self._merge(self.test, df, on=info['index'])
-
-        self.train[0] = self.train.ix[:, self.train.columns != 'SK_ID_CURR']
+        self.train[0] = self.train[0].ix[:, self.train[0].columns != 'SK_ID_CURR']
         print(self.train[0])
 
     def _merge(self, base, add, on=''):
         df = pd.DataFrame(columns=add.columns)
-        for i, index in enumerate(base.ix[:, [on]].values.flatten()):
-            num = (add.ix[add[on] == index, :] == i).shape[0]
-            tmp = sum(v for v in add.ix[add[on] == index, :].values) / num \
-                  if num != 0 else np.array([0,]*add.shape[1])
-            try: df[i] = np.array([index] + list(tmp))
-            except KeyError: pass
+        tmpc = add.columns
+        print('mergeing...')
+        jobs = []
+        n_cpu = cpu_count()
+        fold = base.shape[0] // n_cpu
 
-        return pd.merge(base, df, on=[on])
+        def insert(data, st, ed):
+            for i, index in tqdm(enumerate(base.ix[st:ed, [on]].values.flatten()), total=ed-st):
+                num = (add.ix[add[on] == index, :] == i).shape[0]
+
+                tmp = sum(v for v in add.ix[add[on] == index, :].values) / num \
+                    if num != 0 else np.array([index] + [0, ] * (add.shape[1] - 1))
+
+                data = data.append(pd.DataFrame([tmp], columns=tmpc))
+
+
+
+        for i in range(n_cpu):
+            job = Process(target=insert, args=(df, i*fold, (i+1)*fold))
+            jobs.append(job)
+            job.start()
+
+        [job.join() for job in jobs]
+
+
+        return pd.merge(base, df, on=[on], how='left')
 
     def _compress(self, df, index=''):
         ae = AutoEncoder(df.shape[0], int(df.shape[0]/2))
@@ -43,17 +62,23 @@ class Dataset:
 
     def _impute(self, df):
         for key in df.ix[:, df.dtypes == 'object'].columns:
+            filled = df[key].fillna('N').values.reshape(-1, 1)
             try:
-                df[key] = self.encoders[key].transform(df[key].fillna('N').values)
+
+                df[key] = self.encoders[key].transform(filled)
             except KeyError:
-                self.encoders[key] = LabelEncoder().fit(df[key].fillna('N').values)
-                df[key] = self.encoders[key].transform(df[key].fillna('N').values)
+                self.encoders[key] = LabelEncoder().fit(filled)
+                df[key] = self.encoders[key].transform(filled)
+            except ValueError:
+                new_labels = list(set(filled.flatten()) - set(self.encoders[key].classes_))
+                self.encoders[key].classes_ = np.array(list(self.encoders[key].classes_) + new_labels)
+                df[key] = self.encoders[key].transform(filled)
 
         return df
 
     def _normalize(self, df, omit=[]):
         for key in df.columns:
-            if key not in omit: df[key] = MinMaxScaler().fit_transform(df[key].values)
+            if key not in omit: df[key] = StandardScaler().fit_transform(MinMaxScaler().fit_transform(df[key].values.reshape(-1, 1)))
 
         return df
 
