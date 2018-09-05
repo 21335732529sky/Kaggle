@@ -77,6 +77,11 @@ for n, id_ in tqdm(enumerate(test_ids), total=len(test_ids)):
     img = imread(path)[:,:,:IMG_CHANNELS]
     sizes_test.append([img.shape[0], img.shape[1]])
     img = resize(img, (IMG_HEIGHT, IMG_WIDTH), mode='constant', preserve_range=True)
+    try:
+        depth = np.array([[[depths.ix[id_.replace('.png', ''), 0]],]*IMG_WIDTH,]*IMG_HEIGHT)
+    except KeyError:
+        depth = np.array([[[0],]*IMG_WIDTH]*IMG_HEIGHT)
+    img = np.concatenate((img, depth), axis=2)
     X_test[n] = img
 
 print('Done!')
