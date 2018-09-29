@@ -29,24 +29,24 @@ import tensorflow as tf
 import itertools
 
 
-def resnet_block(x, channel, shape, activation='relu', padding='same'):
-    x = conv_block(activation, channel, padding, shape)
-    x = conv_block(activation, channel, padding, shape)
+def resnet_block(input_block, channel, shape, activation='relu', padding='same'):
+    x = conv_block(activation, channel, padding, shape, input_block)
+    x = conv_block(activation, channel, padding, shape, x)
 
-    return x
+    return Add()([input_block, x])
 
 def conv_block(activation, channel, padding, shape, input_block):
     x = BatchNormalization()(input_block)
     x = Activation(activation)(x)
-    x = Conv2D(channel, shape, padding=padding)
+    x = Conv2D(channel, shape, padding=padding)(x)
 
-    return Add([input_block, x])
+    return x
 
 # Set some parameters
 IMG_WIDTH = 128
 IMG_HEIGHT = 128
-IMG_CHANNELS = 2
-CHANNEL_BASE = 16
+IMG_CHANNELS = 1
+CHANNEL_BASE = 8
 TRAIN_PATH = './data/train_img/'
 TEST_PATH = './data/test_img/'
 MASK_PATH = './data/masks/'
@@ -69,9 +69,8 @@ print('Getting and resizing train images and masks ... ')
 sys.stdout.flush()
 for n, id_ in tqdm(enumerate(train_ids), total=len(train_ids)):
     path = TRAIN_PATH + id_
-    img = imread(path)[:,:,:IMG_CHANNELS - 1]
+    img = imread(path)[:,:,:IMG_CHANNELS]
     img = resize(img, (IMG_HEIGHT, IMG_WIDTH), mode='constant', preserve_range=True)
-    img = np.concatenate((img, laplace(img)), axis=2)
     X_train[n] = img
     mask = np.zeros((IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
     mask_ = imread(MASK_PATH + id_)
@@ -87,10 +86,9 @@ print('Getting and resizing test images ... ')
 sys.stdout.flush()
 for n, id_ in tqdm(enumerate(test_ids), total=len(test_ids)):
     path = TEST_PATH + id_
-    img = imread(path)[:,:,:IMG_CHANNELS - 1]
+    img = imread(path)[:,:,:IMG_CHANNELS]
     sizes_test.append([img.shape[0], img.shape[1]])
     img = resize(img, (IMG_HEIGHT, IMG_WIDTH), mode='constant', preserve_range=True)
-    img = np.concatenate((img, laplace(img)), axis=2)
     X_test[n] = img
 
 print('Done!')
