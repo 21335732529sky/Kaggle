@@ -17,15 +17,30 @@ from skimage.morphology import label
 from skimage.filters import laplace
 from keras.models import Model, load_model
 from keras.layers import Input, Add, Dropout
-from keras.layers.core import Lambda
+from keras.layers.core import Lambda, Activation
 from keras.layers.convolutional import Conv2D, Conv2DTranspose
 from keras.layers.pooling import MaxPooling2D
 from keras.layers.merge import concatenate
+from keras.layers.normalization import BatchNormalization
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from keras import backend as K
 
 import tensorflow as tf
 import itertools
+
+
+def resnet_block(x, channel, shape, activation='relu', padding='same'):
+    x = conv_block(activation, channel, padding, shape)
+    x = conv_block(activation, channel, padding, shape)
+
+    return x
+
+def conv_block(activation, channel, padding, shape, input_block):
+    x = BatchNormalization()(input_block)
+    x = Activation(activation)(x)
+    x = Conv2D(channel, shape, padding=padding)
+
+    return Add([input_block, x])
 
 # Set some parameters
 IMG_WIDTH = 128
@@ -92,108 +107,67 @@ def mean_iou(y_true, y_pred):
         prec.append(score)
     return K.mean(K.stack(prec), axis=0)
 
+
+def build_model():
+    inputs = Input((IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS))
+    s = Lambda(lambda x: x / 255)(inputs)
+    c1 = resnet_block(s, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+    c1 = resnet_block(c1, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+    p1 = MaxPooling2D((2, 2))(c1)
+    # p1 = Dropout(0.3)(p1)
+
+    c2 = resnet_block(p1, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+    c2 = resnet_block(c2, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+    p2 = MaxPooling2D((2, 2))(c2)
+    # p2 = Dropout(0.3)(p2)
+
+    c3 = resnet_block(p2, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+    c3 = resnet_block(c3, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+    p3 = MaxPooling2D((2, 2))(c3)
+    # p3 = Dropout(0.3)(p3)
+
+    c4 = resnet_block(p3, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+    c4 = resnet_block(c4, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+    p4 = MaxPooling2D((2, 2))(c4)
+    # p4 = Dropout(0.3)(p4)
+
+    c5 = resnet_block(p4, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+    c5 = resnet_block(c5, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+
+    u6 = Conv2DTranspose(CHANNEL_BASE * 8, (2, 2), strides=(2, 2), padding='same')(c5)
+    u6 = concatenate([u6, c4])
+    # u6 = Dropout(0.3)(u6)
+    c6 = resnet_block(u6, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+    c6 = resnet_block(c6, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+
+    u7 = Conv2DTranspose(CHANNEL_BASE * 4, (2, 2), strides=(2, 2), padding='same')(c6)
+    u7 = concatenate([u7, c3])
+    # u7 = Dropout(0.3)(u7)
+    c7 = resnet_block(u7, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+    c7 = resnet_block(c7, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+
+    u8 = Conv2DTranspose(CHANNEL_BASE * 2, (2, 2), strides=(2, 2), padding='same')(c7)
+    u8 = concatenate([u8, c2])
+    # u8 = Dropout(0.3)(u8)
+    c8 = resnet_block(u8, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+    c8 = resnet_block(c8, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+
+    u9 = Conv2DTranspose(CHANNEL_BASE, (2, 2), strides=(2, 2), padding='same')(c8)
+    u9 = concatenate([u9, c1], axis=3)
+    # u9 = Dropout(0.3)(u9)
+    c9 = resnet_block(u9, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+    c9 = resnet_block(c9, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
+
+    outputs = Conv2D(1, (1, 1), activation='sigmoid')(c9)
+    model = Model(inputs=[inputs], outputs=[outputs])
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=[mean_iou])
+    model.summary()
+
+    return model
+
+
 # Build U-Net model
-inputs = Input((IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS))
-s = Lambda(lambda x: x / 255) (inputs)
-
-c1_s = Conv2D(CHANNEL_BASE, (3, 3), activation='relu', padding='same') (s)
-c1 = Conv2D(CHANNEL_BASE, (3, 3), activation='relu', padding='same') (c1_s)
-c1 = Conv2D(CHANNEL_BASE, (3, 3), activation='relu', padding='same') (c1)
-c1_m = Add()([c1_s, c1])
-c1 = Conv2D(CHANNEL_BASE, (3, 3), activation='relu', padding='same') (c1_m)
-c1 = Conv2D(CHANNEL_BASE, (3, 3), activation='relu', padding='same') (c1)
-c1 = Add()([c1_m, c1])
-p1 = MaxPooling2D((2, 2)) (c1)
-#p1 = Dropout(0.3)(p1)
-
-
-c2_s = Conv2D(CHANNEL_BASE*2, (3, 3), activation='relu', padding='same') (p1)
-c2 = Conv2D(CHANNEL_BASE*2, (3, 3), activation='relu', padding='same') (c2_s)
-c2 = Conv2D(CHANNEL_BASE*2, (3, 3), activation='relu', padding='same') (c2)
-c2_m = Add()([c2_s, c2])
-c2 = Conv2D(CHANNEL_BASE*2, (3, 3), activation='relu', padding='same') (c2_m)
-c2 = Conv2D(CHANNEL_BASE*2, (3, 3), activation='relu', padding='same') (c2)
-c2 = Add()([c2_m, c2])
-p2 = MaxPooling2D((2, 2)) (c2)
-#p2 = Dropout(0.3)(p2)
-
-c3_s = Conv2D(CHANNEL_BASE*4, (3, 3), activation='relu', padding='same') (p2)
-c3 = Conv2D(CHANNEL_BASE*4, (3, 3), activation='relu', padding='same') (c3_s)
-c3 = Conv2D(CHANNEL_BASE*4, (3, 3), activation='relu', padding='same') (c3)
-c3_m = Add()([c3_s, c3])
-c3 = Conv2D(CHANNEL_BASE*4, (3, 3), activation='relu', padding='same') (c3_m)
-c3 = Conv2D(CHANNEL_BASE*4, (3, 3), activation='relu', padding='same') (c3)
-c3 = Add()([c3_m, c3])
-p3 = MaxPooling2D((2, 2)) (c3)
-#p3 = Dropout(0.3)(p3)
-
-c4_s = Conv2D(CHANNEL_BASE*8, (3, 3), activation='relu', padding='same') (p3)
-c4 = Conv2D(CHANNEL_BASE*8, (3, 3), activation='relu', padding='same') (c4_s)
-c4 = Conv2D(CHANNEL_BASE*8, (3, 3), activation='relu', padding='same') (c4)
-c4_m = Add()([c4_s, c4])
-c4 = Conv2D(CHANNEL_BASE*8, (3, 3), activation='relu', padding='same') (c4_m)
-c4 = Conv2D(CHANNEL_BASE*8, (3, 3), activation='relu', padding='same') (c4)
-c4 = Add()([c4_m, c4])
-p4 = MaxPooling2D(pool_size=(2, 2)) (c4)
-#p4 = Dropout(0.3)(p4)
-
-c5_s = Conv2D(CHANNEL_BASE*16, (3, 3), activation='relu', padding='same') (p4)
-c5 = Conv2D(CHANNEL_BASE*16, (3, 3), activation='relu', padding='same') (c5_s)
-c5 = Conv2D(CHANNEL_BASE*16, (3, 3), activation='relu', padding='same') (c5)
-c5_m = Add()([c5_s, c5])
-c5 = Conv2D(CHANNEL_BASE*16, (3, 3), activation='relu', padding='same') (c5_m)
-c5 = Conv2D(CHANNEL_BASE*16, (3, 3), activation='relu', padding='same') (c5)
-c5 = Add()([c5_m, c5])
-
-u6 = Conv2DTranspose(CHANNEL_BASE*8, (2, 2), strides=(2, 2), padding='same') (c5)
-u6 = concatenate([u6, c4])
-#u6 = Dropout(0.3)(u6)
-c6_s = Conv2D(CHANNEL_BASE*8, (3, 3), activation='relu', padding='same') (u6)
-c6 = Conv2D(CHANNEL_BASE*8, (3, 3), activation='relu', padding='same') (c6_s)
-c6 = Conv2D(CHANNEL_BASE*8, (3, 3), activation='relu', padding='same') (c6)
-c6_m = Add()([c6_s, c6])
-c6 = Conv2D(CHANNEL_BASE*8, (3, 3), activation='relu', padding='same') (c6_m)
-c6 = Conv2D(CHANNEL_BASE*8, (3, 3), activation='relu', padding='same') (c6)
-c6 = Add()([c6_m, c6])
-
-u7 = Conv2DTranspose(CHANNEL_BASE*4, (2, 2), strides=(2, 2), padding='same') (c6)
-u7 = concatenate([u7, c3])
-#u7 = Dropout(0.3)(u7)
-c7_s = Conv2D(CHANNEL_BASE*4, (3, 3), activation='relu', padding='same') (u7)
-c7 = Conv2D(CHANNEL_BASE*4, (3, 3), activation='relu', padding='same') (c7_m)
-c7 = Conv2D(CHANNEL_BASE*4, (3, 3), activation='relu', padding='same') (c7)
-c7_m = Add()([c7_s, c7])
-c7 = Conv2D(CHANNEL_BASE*4, (3, 3), activation='relu', padding='same') (c7_m)
-c7 = Conv2D(CHANNEL_BASE*4, (3, 3), activation='relu', padding='same') (c7)
-c7 = Add()([c7_m, c7])
-
-u8 = Conv2DTranspose(CHANNEL_BASE*2, (2, 2), strides=(2, 2), padding='same') (c7)
-u8 = concatenate([u8, c2])
-#u8 = Dropout(0.3)(u8)
-c8_s = Conv2D(CHANNEL_BASE*2, (3, 3), activation='relu', padding='same') (u8)
-c8 = Conv2D(CHANNEL_BASE*2, (3, 3), activation='relu', padding='same') (c8_s)
-c8 = Conv2D(CHANNEL_BASE*2, (3, 3), activation='relu', padding='same') (c8)
-c8_m = Add()([c8_s, c8])
-c8 = Conv2D(CHANNEL_BASE*2, (3, 3), activation='relu', padding='same') (c8_m)
-c8 = Conv2D(CHANNEL_BASE*2, (3, 3), activation='relu', padding='same') (c8)
-c8 = Add()([c8_m, c8])
-
-u9 = Conv2DTranspose(CHANNEL_BASE, (2, 2), strides=(2, 2), padding='same') (c8)
-u9 = concatenate([u9, c1], axis=3)
-#u9 = Dropout(0.3)(u9)
-c9_s = Conv2D(CHANNEL_BASE, (3, 3), activation='relu', padding='same') (u9)
-c9 = Conv2D(CHANNEL_BASE, (3, 3), activation='relu', padding='same') (c9_s)
-c9 = Conv2D(CHANNEL_BASE, (3, 3), activation='relu', padding='same') (c9)
-c9_m = Add()([c9_s, c9])
-c9 = Conv2D(CHANNEL_BASE, (3, 3), activation='relu', padding='same') (c9_m)
-c9 = Conv2D(CHANNEL_BASE, (3, 3), activation='relu', padding='same') (c9)
-c9 = Add()([c9_m, c9])
-
-outputs = Conv2D(1, (1, 1), activation='sigmoid') (c9)
-
-model = Model(inputs=[inputs], outputs=[outputs])
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=[mean_iou])
-model.summary()
+model = build_model()
 
 # Fit model
 earlystopper = EarlyStopping(patience=10, verbose=1)
