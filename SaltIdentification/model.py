@@ -114,22 +114,26 @@ def build_model():
     p1 = MaxPooling2D((2, 2))(c1)
     # p1 = Dropout(0.3)(p1)
 
-    c2 = resnet_block(p1, CHANNEL_BASE * 2, (3, 3), activation='relu', padding='same')
+    c2 = Conv2D(CHANNEL_BASE * 2, (3, 3), activation='relu', padding='same')(p1)
+    c2 = resnet_block(c2, CHANNEL_BASE * 2, (3, 3), activation='relu', padding='same')
     c2 = resnet_block(c2, CHANNEL_BASE * 2, (3, 3), activation='relu', padding='same')
     p2 = MaxPooling2D((2, 2))(c2)
     # p2 = Dropout(0.3)(p2)
 
-    c3 = resnet_block(p2, CHANNEL_BASE * 4, (3, 3), activation='relu', padding='same')
+    c3 = Conv2D(CHANNEL_BASE * 4, (3, 3), activation='relu', padding='same')(p2)
+    c3 = resnet_block(c3, CHANNEL_BASE * 4, (3, 3), activation='relu', padding='same')
     c3 = resnet_block(c3, CHANNEL_BASE * 4, (3, 3), activation='relu', padding='same')
     p3 = MaxPooling2D((2, 2))(c3)
     # p3 = Dropout(0.3)(p3)
 
-    c4 = resnet_block(p3, CHANNEL_BASE * 8, (3, 3), activation='relu', padding='same')
+    c4 = Conv2D(CHANNEL_BASE * 8, (3, 3), activation='relu', padding='same')(p3)
+    c4 = resnet_block(c4, CHANNEL_BASE * 8, (3, 3), activation='relu', padding='same')
     c4 = resnet_block(c4, CHANNEL_BASE * 8, (3, 3), activation='relu', padding='same')
     p4 = MaxPooling2D((2, 2))(c4)
     # p4 = Dropout(0.3)(p4)
 
-    c5 = resnet_block(p4, CHANNEL_BASE * 16, (3, 3), activation='relu', padding='same')
+    c5 = Conv2D(CHANNEL_BASE * 16, (3, 3), activation='relu', padding='same')(p4)
+    c5 = resnet_block(c5, CHANNEL_BASE * 16, (3, 3), activation='relu', padding='same')
     c5 = resnet_block(c5, CHANNEL_BASE * 16, (3, 3), activation='relu', padding='same')
 
     u6 = Conv2DTranspose(CHANNEL_BASE * 8, (2, 2), strides=(2, 2), padding='same')(c5)
