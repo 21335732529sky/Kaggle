@@ -22,9 +22,10 @@ from keras.layers.convolutional import Conv2D, Conv2DTranspose
 from keras.layers.pooling import MaxPooling2D
 from keras.layers.merge import concatenate
 from keras.layers.normalization import BatchNormalization
-from keras.callbacks import EarlyStopping, ModelCheckpoint
+from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from keras import backend as K
 
+from keras import optimizers
 import tensorflow as tf
 import itertools
 
@@ -63,27 +64,27 @@ test_ids = next(os.walk(TEST_PATH))[2]
 depths = pd.read_csv(DEPTH_PATH + 'depths.csv', index_col='id')
 
 # Get and resize train images and masks
-X_train = np.zeros((len(train_ids)*4, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS), dtype=np.uint8)
-Y_train = np.zeros((len(train_ids)*4, IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
+X_train = np.zeros((len(train_ids), IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS), dtype=np.uint8)
+Y_train = np.zeros((len(train_ids), IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
 print('Getting and resizing train images and masks ... ')
 sys.stdout.flush()
 for n, id_ in tqdm(enumerate(train_ids), total=len(train_ids)):
     path = TRAIN_PATH + id_
     img = imread(path)[:,:,:IMG_CHANNELS]
     img = resize(img, (IMG_HEIGHT, IMG_WIDTH), mode='constant', preserve_range=True)
-    X_train[4*n] = img
-    X_train[4*n + 1] = rotate(img, 90)
-    X_train[4*n + 2] = rotate(img, 180)
-    X_train[4*n + 3] = rotate(img, 270)
+    X_train[n] = img
+    #X_train[4*n + 1] = rotate(img, 90)
+    #X_train[4*n + 2] = rotate(img, 180)
+    #X_train[4*n + 3] = rotate(img, 270)
     mask = np.zeros((IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
     mask_ = imread(MASK_PATH + id_)
     mask_ = np.expand_dims(resize(mask_, (IMG_HEIGHT, IMG_WIDTH), mode='constant',
                                   preserve_range=True), axis=-1)
     mask = np.maximum(mask, mask_)
-    Y_train[4*n] = mask
-    Y_train[4*n + 1] = rotate(mask, 90)
-    Y_train[4*n + 2] = rotate(mask, 180)
-    Y_train[4*n + 3] = rotate(mask, 270)
+    Y_train[n] = mask
+    #Y_train[4*n + 1] = rotate(mask, 90)
+    #Y_train[4*n + 2] = rotate(mask, 180)
+    #Y_train[4*n + 3] = rotate(mask, 270)
 
 # Get and resize test images
 X_test = np.zeros((len(test_ids), IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS), dtype=np.uint8)
@@ -141,6 +142,9 @@ def get_iou_vector(A, B):
 
 def my_iou_metric(label, pred):
     return tf.py_func(get_iou_vector, [label, pred > 0.5], tf.float64)
+
+def my_iou_metric_2(label, pred):
+    return tf.py_func(get_iou_vector, [label, pred > 0], tf.float64)
 
 def build_model():
     inputs = Input((IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS))
@@ -207,6 +211,91 @@ def build_model():
 
     return model
 
+# code download from: https://github.com/bermanmaxim/LovaszSoftmax
+def lovasz_grad(gt_sorted):
+    """
+    Computes gradient of the Lovasz extension w.r.t sorted errors
+    See Alg. 1 in paper
+    """
+    gts = tf.reduce_sum(gt_sorted)
+    intersection = gts - tf.cumsum(gt_sorted)
+    union = gts + tf.cumsum(1. - gt_sorted)
+    jaccard = 1. - intersection / union
+    jaccard = tf.concat((jaccard[0:1], jaccard[1:] - jaccard[:-1]), 0)
+    return jaccard
+
+
+# --------------------------- BINARY LOSSES ---------------------------
+
+def lovasz_hinge(logits, labels, per_image=True, ignore=None):
+    """
+    Binary Lovasz hinge loss
+      logits: [B, H, W] Variable, logits at each pixel (between -\infty and +\infty)
+      labels: [B, H, W] Tensor, binary ground truth masks (0 or 1)
+      per_image: compute the loss per image instead of per batch
+      ignore: void class id
+    """
+    if per_image:
+        def treat_image(log_lab):
+            log, lab = log_lab
+            log, lab = tf.expand_dims(log, 0), tf.expand_dims(lab, 0)
+            log, lab = flatten_binary_scores(log, lab, ignore)
+            return lovasz_hinge_flat(log, lab)
+        losses = tf.map_fn(treat_image, (logits, labels), dtype=tf.float32)
+        loss = tf.reduce_mean(losses)
+    else:
+        loss = lovasz_hinge_flat(*flatten_binary_scores(logits, labels, ignore))
+    return loss
+
+
+def lovasz_hinge_flat(logits, labels):
+    """
+    Binary Lovasz hinge loss
+      logits: [P] Variable, logits at each prediction (between -\infty and +\infty)
+      labels: [P] Tensor, binary ground truth labels (0 or 1)
+      ignore: label to ignore
+    """
+
+    def compute_loss():
+        labelsf = tf.cast(labels, logits.dtype)
+        signs = 2. * labelsf - 1.
+        errors = 1. - logits * tf.stop_gradient(signs)
+        errors_sorted, perm = tf.nn.top_k(errors, k=tf.shape(errors)[0], name="descending_sort")
+        gt_sorted = tf.gather(labelsf, perm)
+        grad = lovasz_grad(gt_sorted)
+        loss = tf.tensordot(tf.nn.relu(errors_sorted), tf.stop_gradient(grad), 1, name="loss_non_void")
+        return loss
+
+    # deal with the void prediction case (only void pixels)
+    loss = tf.cond(tf.equal(tf.shape(logits)[0], 0),
+                   lambda: tf.reduce_sum(logits) * 0.,
+                   compute_loss,
+                   strict=True,
+                   name="loss"
+                   )
+    return loss
+
+
+def flatten_binary_scores(scores, labels, ignore=None):
+    """
+    Flattens predictions in the batch (binary case)
+    Remove labels equal to 'ignore'
+    """
+    scores = tf.reshape(scores, (-1,))
+    labels = tf.reshape(labels, (-1,))
+    if ignore is None:
+        return scores, labels
+    valid = tf.not_equal(labels, ignore)
+    vscores = tf.boolean_mask(scores, valid, name='valid_scores')
+    vlabels = tf.boolean_mask(labels, valid, name='valid_labels')
+    return vscores, vlabels
+
+def lovasz_loss(y_true, y_pred):
+    y_true, y_pred = K.cast(K.squeeze(y_true, -1), 'int32'), K.cast(K.squeeze(y_pred, -1), 'float32')
+    #logits = K.log(y_pred / (1. - y_pred))
+    logits = y_pred #Jiaxin
+    loss = lovasz_hinge(logits, y_true, per_image = True, ignore = None)
+    return loss
 
 # Build U-Net model
 model = build_model()
@@ -219,9 +308,31 @@ results = model.fit(X_train, Y_train, validation_split=0.1, batch_size=8, epochs
 
 # Predict on train, val and test
 model = load_model('model-dsbowl2018-1.h5', custom_objects={'my_iou_metric': my_iou_metric})
-preds_train = model.predict(X_train[:int(X_train.shape[0]*0.9)], verbose=1)
-preds_val = model.predict(X_train[int(X_train.shape[0]*0.9):], verbose=1)
-preds_test = model.predict(X_test, verbose=1)
+
+input_x = model.layers[0].input
+output_layer = model.layers[-1].input
+
+model2 = Model(input_x, output_layer)
+c = optimizers.adam(lr=0.01)
+
+model2.compile(loss=lovasz_loss, optimizer=c, metrics=[my_iou_metric_2])
+
+early_stopping = EarlyStopping(monitor='val_my_iou_metric_2', mode = 'max',patience=20, verbose=1)
+model_checkpoint = ModelCheckpoint('model-dsbowl2018-1.h5', monitor='val_my_iou_metric_2',
+                                   mode = 'max', save_best_only=True, verbose=1)
+reduce_lr = ReduceLROnPlateau(monitor='val_my_iou_metric_2', mode = 'max',factor=0.5, patience=5, min_lr=0.0001, verbose=1)
+epochs = 50
+batch_size = 32
+
+history = model2.fit(X_train, Y_train, validation_split=0.1, epochs=epochs,
+                     batch_size=batch_size, callbacks=[ model_checkpoint,reduce_lr,early_stopping], verbose=2)
+
+model2 = load_model('model-dsbowl2018-1.h5', custom_objects={'my_iou_metric_2': my_iou_metric_2,
+                                                             'lovasz_loss': lovasz_loss})
+
+preds_train = model2.predict(X_train[:int(X_train.shape[0]*0.9)], verbose=1)
+preds_val = model2.predict(X_train[int(X_train.shape[0]*0.9):], verbose=1)
+preds_test = model2.predict(X_test, verbose=1)
 
 def mean_iou(y_true, y_pred):
     prec = []
