@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from itertools import chain
 from skimage.io import imread, imshow, imread_collection, concatenate_images
-from skimage.transform import resize
+from skimage.transform import resize, rotate
 from skimage.morphology import label
 from skimage.filters import laplace
 from keras.models import Model, load_model
@@ -72,12 +72,18 @@ for n, id_ in tqdm(enumerate(train_ids), total=len(train_ids)):
     img = imread(path)[:,:,:IMG_CHANNELS]
     img = resize(img, (IMG_HEIGHT, IMG_WIDTH), mode='constant', preserve_range=True)
     X_train[n] = img
+    #X_train[4*n + 1] = rotate(img, 90)
+    #X_train[4*n + 2] = rotate(img, 180)
+    #X_train[4*n + 3] = rotate(img, 270)
     mask = np.zeros((IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
     mask_ = imread(MASK_PATH + id_)
     mask_ = np.expand_dims(resize(mask_, (IMG_HEIGHT, IMG_WIDTH), mode='constant',
                                   preserve_range=True), axis=-1)
     mask = np.maximum(mask, mask_)
     Y_train[n] = mask
+    #Y_train[4*n + 1] = rotate(mask, 90)
+    #Y_train[4*n + 2] = rotate(mask, 180)
+    #Y_train[4*n + 3] = rotate(mask, 270)
 
 # Get and resize test images
 X_test = np.zeros((len(test_ids), IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS), dtype=np.uint8)
@@ -112,25 +118,25 @@ def build_model():
     c1 = resnet_block(s, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
     c1 = resnet_block(c1, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
     p1 = MaxPooling2D((2, 2))(c1)
-    # p1 = Dropout(0.3)(p1)
+    #p1 = Dropout(0.3)(p1)
 
     c2 = Conv2D(CHANNEL_BASE * 2, (3, 3), activation='relu', padding='same')(p1)
     c2 = resnet_block(c2, CHANNEL_BASE * 2, (3, 3), activation='relu', padding='same')
     c2 = resnet_block(c2, CHANNEL_BASE * 2, (3, 3), activation='relu', padding='same')
     p2 = MaxPooling2D((2, 2))(c2)
-    # p2 = Dropout(0.3)(p2)
+    #p2 = Dropout(0.3)(p2)
 
     c3 = Conv2D(CHANNEL_BASE * 4, (3, 3), activation='relu', padding='same')(p2)
     c3 = resnet_block(c3, CHANNEL_BASE * 4, (3, 3), activation='relu', padding='same')
     c3 = resnet_block(c3, CHANNEL_BASE * 4, (3, 3), activation='relu', padding='same')
     p3 = MaxPooling2D((2, 2))(c3)
-    # p3 = Dropout(0.3)(p3)
+    #p3 = Dropout(0.3)(p3)
 
     c4 = Conv2D(CHANNEL_BASE * 8, (3, 3), activation='relu', padding='same')(p3)
     c4 = resnet_block(c4, CHANNEL_BASE * 8, (3, 3), activation='relu', padding='same')
     c4 = resnet_block(c4, CHANNEL_BASE * 8, (3, 3), activation='relu', padding='same')
     p4 = MaxPooling2D((2, 2))(c4)
-    # p4 = Dropout(0.3)(p4)
+    #p4 = Dropout(0.3)(p4)
 
     c5 = Conv2D(CHANNEL_BASE * 16, (3, 3), activation='relu', padding='same')(p4)
     c5 = resnet_block(c5, CHANNEL_BASE * 16, (3, 3), activation='relu', padding='same')
@@ -138,28 +144,28 @@ def build_model():
 
     u6 = Conv2DTranspose(CHANNEL_BASE * 8, (2, 2), strides=(2, 2), padding='same')(c5)
     u6 = concatenate([u6, c4])
-    # u6 = Dropout(0.3)(u6)
+    #u6 = Dropout(0.3)(u6)
     c6 = Conv2D(CHANNEL_BASE * 8, (3, 3), activation='relu', padding='same')(u6)
     c6 = resnet_block(c6, CHANNEL_BASE * 8, (3, 3), activation='relu', padding='same')
     c6 = resnet_block(c6, CHANNEL_BASE * 8, (3, 3), activation='relu', padding='same')
 
     u7 = Conv2DTranspose(CHANNEL_BASE * 4, (2, 2), strides=(2, 2), padding='same')(c6)
     u7 = concatenate([u7, c3])
-    # u7 = Dropout(0.3)(u7)
+    #u7 = Dropout(0.3)(u7)
     c7 = Conv2D(CHANNEL_BASE * 4, (3, 3), activation='relu', padding='same')(u7)
     c7 = resnet_block(c7, CHANNEL_BASE * 4, (3, 3), activation='relu', padding='same')
     c7 = resnet_block(c7, CHANNEL_BASE * 4, (3, 3), activation='relu', padding='same')
 
     u8 = Conv2DTranspose(CHANNEL_BASE * 2, (2, 2), strides=(2, 2), padding='same')(c7)
     u8 = concatenate([u8, c2])
-    # u8 = Dropout(0.3)(u8)
+    #u8 = Dropout(0.3)(u8)
     c8 = Conv2D(CHANNEL_BASE * 2, (3, 3), activation='relu', padding='same')(u8)
     c8 = resnet_block(c8, CHANNEL_BASE * 2, (3, 3), activation='relu', padding='same')
     c8 = resnet_block(c8, CHANNEL_BASE * 2, (3, 3), activation='relu', padding='same')
 
     u9 = Conv2DTranspose(CHANNEL_BASE, (2, 2), strides=(2, 2), padding='same')(c8)
     u9 = concatenate([u9, c1], axis=3)
-    # u9 = Dropout(0.3)(u9)
+    #u9 = Dropout(0.3)(u9)
     c9 = Conv2D(CHANNEL_BASE, (3, 3), activation='relu', padding='same')(u9)
     c9 = resnet_block(c9, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
     c9 = resnet_block(c9, CHANNEL_BASE, (3, 3), activation='relu', padding='same')
@@ -176,10 +182,10 @@ def build_model():
 model = build_model()
 
 # Fit model
-earlystopper = EarlyStopping(patience=10, verbose=1)
-checkpointer = ModelCheckpoint('model-dsbowl2018-1.h5', verbose=1, save_best_only=True)
+earlystopper = EarlyStopping(monitor='val_mean_iou', mode='max', patience=10, verbose=1)
+checkpointer = ModelCheckpoint('model-dsbowl2018-1.h5', monitor='val_mean_iou', mode='max', verbose=1, save_best_only=True)
 results = model.fit(X_train, Y_train, validation_split=0.1, batch_size=8, epochs=60,
-                    callbacks=[earlystopper, checkpointer])
+                    shuffle=True, callbacks=[earlystopper, checkpointer])
 
 # Predict on train, val and test
 model = load_model('model-dsbowl2018-1.h5', custom_objects={'mean_iou': mean_iou})
@@ -194,7 +200,7 @@ def mean_iou(y_true, y_pred):
         tmp_p = (y_pred > t).astype(np.uint8)
         inter = np.array([sum(list((y_true[k]*tmp_p[k]).flatten())) for k in range(y_true.shape[0])])
         union = np.array([sum(list((y_true[k] + tmp_p[k] >= 1).astype(np.uint8).flatten())) for k in range(y_true.shape[0])])
-        prec.append(np.mean([i / u for i, u in zip(inter, union) if u > 0]))
+        prec.append(np.mean([i / u if u > 0 else 1 for i, u in zip(inter, union)]))
         res.append((prec[-1], t))
         print(res[-1])
         sys.stdout.flush()
