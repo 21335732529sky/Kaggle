@@ -63,27 +63,27 @@ test_ids = next(os.walk(TEST_PATH))[2]
 depths = pd.read_csv(DEPTH_PATH + 'depths.csv', index_col='id')
 
 # Get and resize train images and masks
-X_train = np.zeros((len(train_ids), IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS), dtype=np.uint8)
-Y_train = np.zeros((len(train_ids), IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
+X_train = np.zeros((len(train_ids)*4, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS), dtype=np.uint8)
+Y_train = np.zeros((len(train_ids)*4, IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
 print('Getting and resizing train images and masks ... ')
 sys.stdout.flush()
 for n, id_ in tqdm(enumerate(train_ids), total=len(train_ids)):
     path = TRAIN_PATH + id_
     img = imread(path)[:,:,:IMG_CHANNELS]
     img = resize(img, (IMG_HEIGHT, IMG_WIDTH), mode='constant', preserve_range=True)
-    X_train[n] = img
-    #X_train[4*n + 1] = rotate(img, 90)
-    #X_train[4*n + 2] = rotate(img, 180)
-    #X_train[4*n + 3] = rotate(img, 270)
+    X_train[4*n] = img
+    X_train[4*n + 1] = rotate(img, 90)
+    X_train[4*n + 2] = rotate(img, 180)
+    X_train[4*n + 3] = rotate(img, 270)
     mask = np.zeros((IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
     mask_ = imread(MASK_PATH + id_)
     mask_ = np.expand_dims(resize(mask_, (IMG_HEIGHT, IMG_WIDTH), mode='constant',
                                   preserve_range=True), axis=-1)
     mask = np.maximum(mask, mask_)
-    Y_train[n] = mask
-    #Y_train[4*n + 1] = rotate(mask, 90)
-    #Y_train[4*n + 2] = rotate(mask, 180)
-    #Y_train[4*n + 3] = rotate(mask, 270)
+    Y_train[4*n] = mask
+    Y_train[4*n + 1] = rotate(mask, 90)
+    Y_train[4*n + 2] = rotate(mask, 180)
+    Y_train[4*n + 3] = rotate(mask, 270)
 
 # Get and resize test images
 X_test = np.zeros((len(test_ids), IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS), dtype=np.uint8)
@@ -212,13 +212,13 @@ def build_model():
 model = build_model()
 
 # Fit model
-earlystopper = EarlyStopping(monitor='val_mean_iou', mode='max', patience=10, verbose=1)
-checkpointer = ModelCheckpoint('model-dsbowl2018-1.h5', monitor='val_mean_iou', mode='max', verbose=1, save_best_only=True)
+earlystopper = EarlyStopping(monitor='val_my_iou_metric', mode='max', patience=10, verbose=1)
+checkpointer = ModelCheckpoint('model-dsbowl2018-1.h5', monitor='val_my_iou_metric', mode='max', verbose=1, save_best_only=True)
 results = model.fit(X_train, Y_train, validation_split=0.1, batch_size=8, epochs=60,
                     shuffle=True, callbacks=[earlystopper, checkpointer])
 
 # Predict on train, val and test
-model = load_model('model-dsbowl2018-1.h5', custom_objects={'mean_iou': mean_iou})
+model = load_model('model-dsbowl2018-1.h5', custom_objects={'my_iou_metric': my_iou_metric})
 preds_train = model.predict(X_train[:int(X_train.shape[0]*0.9)], verbose=1)
 preds_val = model.predict(X_train[int(X_train.shape[0]*0.9):], verbose=1)
 preds_test = model.predict(X_test, verbose=1)
